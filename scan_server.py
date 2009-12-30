@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# Copyright 2009, Brian Taylor
+# Distributed under the GNU General Public License
+
+# main webapp
+
 import os
 import subprocess
 import tornado.httpserver

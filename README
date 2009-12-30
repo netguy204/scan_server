@@ -1,6 +1,6 @@
 Copyright 2009 Brian Taylor
 el.wubo@gmail.com
 
-The following code is distrubted under the GNU General Public License (version 2 or greater)
+The files that make up the scan server are under the GNU General Public License (version 2 or greater)
 
-tornado is included in this repo for convenience. I didn't write it.
+tornado is included in this repo for convenience. It is redistributed under the apache 2.0 license.

@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# Copyright 2009, Brian Taylor
+# Distributed under the GNU General Public License
+
+# data model for scan_server
+
 import dbm
 import pickle
 import uuid
