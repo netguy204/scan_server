@@ -1,0 +1,39 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides: scan_server
+# Required-Start:    $syslog $network
+# Required-Stop:     $syslog $network
+# Default-Start:     2 3 4 5
+# Default-Stop:      1
+# Short-Description: Start scan_server
+### END INIT INFO
+
+USER=btaylor
+CWD=/home/btaylor/src/python/www
+CMD=scan_server.py
+PID=$CWD/scan_server.pid
+
+. /lib/lsb/init-functions
+. /etc/default/rcS
+
+case $1 in
+	start)
+		start-stop-daemon --$1 --pidfile $PID --user $USER --chuid $USER --chdir $CWD --make-pidfile --startas $CMD --background
+		;;
+	stop)
+		start-stop-daemon --$1 --pidfile $PID --user $USER --chuid $USER --chdir $CWD --make-pidfile --startas $CMD
+		;;
+		
+	restart|reload|force-reload)
+		$0 stop
+		$0 start
+		;;
+	status)
+		status_of_proc -p $PID "$CWD/$CMD" "scan server" && exit 0 || exit $?
+		;;
+	*)
+		echo "Cannot execute command $1"
+		exit 1
+esac
+
+exit 0
