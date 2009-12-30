@@ -8,6 +8,8 @@ tornado is included in this repo for convenience. It was written by the Facebook
 INSTALLATION
 ============
 
+The server is pretty messy and expects to be able to store its database and image files relative to its current working directory. In practice, for me, this has been just fine and seems pretty workable long-term. The script will create a database file in it's current working directory called "scan_data.db" and will expect a directory called `static' (or link by that name) to exist so it can store all its images. The script must be able to write to that directory as whatever user it happens to be running as.
+
 Make sure you have imagemagick installed (need convert)
 
 Drop the code somewhere.
@@ -16,12 +18,16 @@ Go somewhere (maybe where the code is) and make sure you have a static directory
 
 Run python $somepath/scan_server.py in the directory that contains static
 
+Go to localhost:8000 and bask in the glory
+
 MORE PERMANENT INSTALLATION
 ===========================
 
 Copy init.d/scan_server into /etc/init.d
 
 Modify CWD to point at the directory where you put static
+
+Modify USER to be the user you want the server to run as (must be able to read and create files and directories in static)
 
 Symlink scan_server.py and scan_data.py into the directory where you put static
 
