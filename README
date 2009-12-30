@@ -5,6 +5,29 @@ The files that make up the scan server are under the GNU General Public License 
 
 tornado is included in this repo for convenience. It was written by the Facebook team and is redistributed under the apache 2.0 license.
 
+INSTALLATION
+============
+
+Make sure you have imagemagick installed (need convert)
+
+Drop the code somewhere.
+
+Go somewhere (maybe where the code is) and make sure you have a static directory that can be written to.
+
+Run python $somepath/scan_server.py in the directory that contains static
+
+MORE PERMANENT INSTALLATION
+===========================
+
+Copy init.d/scan_server into /etc/init.d
+
+Modify CWD to point at the directory where you put static
+
+Symlink scan_server.py and scan_data.py into the directory where you put static
+
+Run your platforms startup service utility to make sure that scan_server is executed at startup. 
+
+For ubuntu: rc.update scan_server defaults
 
 CONFIGURATION
 =============
