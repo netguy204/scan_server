@@ -3,4 +3,24 @@ el.wubo@gmail.com
 
 The files that make up the scan server are under the GNU General Public License (version 2 or greater)
 
-tornado is included in this repo for convenience. It is redistributed under the apache 2.0 license.
+tornado is included in this repo for convenience. It was written by the Facebook team and is redistributed under the apache 2.0 license.
+
+
+CONFIGURATION
+=============
+
+The variables that are most configurable are loosely oriented towards the top of the scan_server.py file. The defaults assume that SANE is installed and can automatically find your scanner. All scanned images, thumbnails, and medium scale images are stored in the static subdirectory of the current working directory of this program. The database is stored in scan_data.db.
+
+THINGS THAT CAN IMPROVE
+=======================
+
+* The main document listing page is produced by iterating every key in the database. Obviously this won't scale.
+* Image resizing blocks the server. It would be simple to make it happen in the background.
+* Need to be able to change the name and tags for a document
+* Need to be able to delete pages or move them to other documents
+* Nicer styling would be cool
+* Some image post processing
+  - background smoothing (get rid of some of the paper effects)
+  - detect BW/greyscale documents and convert
+  - auto rotate assuming the document is a rectangle
+* Is PNG the best choice for this? My images are HUGE!

@@ -15,11 +15,13 @@ import math
 
 import scan_data
 import dbm
+import zipfile
 
 db = dbm.open("scan_data", "c")
 
 thumb_base_dir = "static/thumbnails"
 pagesized_base_dir = "static/pagesized"
+exported_base_dir = "static/exported"
 scanner_cmd = ["scanimage", "--mode", "color", "--format=tiff"]
 
 def start_scan(filename):
@@ -35,6 +37,53 @@ def make_thumbnail(input, output, target_width):
   scale_factor = math.floor(base_resolution[0] / target_width)
   target_scale = (target_width, base_resolution[1] / scale_factor)
   subprocess.Popen(["convert", "-scale", "%dx%d" % target_scale, input, output]).communicate()
+
+class ExportHandler(tornado.web.RequestHandler):
+  def get(self, doc_key, format=None):
+    "get a document in a specific format"
+    doc = scan_data.read_document(doc_key, db)
+
+    if not os.path.isdir(exported_base_dir):
+      os.mkdir(exported_base_dir)
+
+    if not format:
+      format = self.get_argument("format")
+      self.redirect("/export/%s.%s" % (doc_key, format))
+      return
+
+    output_path = "%s/%s.%s" % (exported_base_dir, doc_key, format)
+
+    if not os.path.exists(output_path):
+      if format == "zip":
+        zip = zipfile.ZipFile(output_path, "w")
+
+        for num, page in enumerate(doc.pages()):
+          zip.write(page.filename, "page_%d.png" % (num+1))
+
+        zip.close()
+      elif format == "big.pdf":
+        cmd = ["convert"]
+        cmd.extend([ page.filename for page in doc.pages() ])
+        cmd.append(output_path)
+        subprocess.Popen(cmd).communicate()
+      elif format == "mid.pdf":
+        cmd = ["convert", "-scale", "50%x50%"]
+        cmd.extend([ page.filename for page in doc.pages() ])
+        cmd.append(output_path)
+        subprocess.Popen(cmd).communicate()
+      elif format == "low.pdf":
+        cmd = ["convert", "-scale", "30%x30%"]
+        cmd.extend([ page.filename for page in doc.pages() ])
+        cmd.append(output_path)
+        subprocess.Popen(cmd).communicate()
+      else:
+        raise Exception("Format %s is not supported" % format)
+
+    self.set_header("Content-Disposition", "attachment")
+    self.set_header("Content-Type", "application/octet-stream")
+    self.set_header("Content-Transfer_encoding", "binary")
+    result = open(output_path)
+    self.write(result.read())
 
 class PageHandler(tornado.web.RequestHandler):
   def get(self):
@@ -179,23 +228,32 @@ class DocumentHandler(tornado.web.RequestHandler):
       pages_html.append("<a href=\"/page/%s\"><img src=\"/thumbnail/%s\" /></a>" % (page.key(), page.key()))
     pages_html = "\n".join(pages_html)
 
+    controls = """
+    <a href="/documents">Back To All Documents</a><br/>
+    <form action="/export/%(doc_key)s">
+    <select name="format">
+    <option value="zip">Download as zip</option>
+    <option value="big.pdf">Download as full quality PDF</option>
+    <option value="mid.pdf">Download as reasonable quality PDF</option>
+    <option value="low.pdf">Download as low quality PDF</option>
+    </select>
+    <input type="submit" value="Download" />
+    </form>
+    <form method="post">
+      <input type="submit" value="Scan a Page" />
+    </form>
+    """ % locals()
+
     self.set_header("Content-Type", "text/html")
     self.write("""
     <html><head><title>Document: %(doc_name)s</title></head>
     <body>
     <h1>%(doc_name)s</h1>
-    <a href="/documents">Back To All Documents</a><br/><br/>
-    <form method="post">
-      <input type="submit" value="Scan a Page" />
-    </form>
+    %(controls)s
     <hr/>
     %(pages_html)s
     <br/>
-    <a href="/documents">Back To Documents</a>
-    <br/><br/>
-    <form method="post">
-      <input type="submit" value="Scan a Page" />
-    </form>
+    %(controls)s
     </html>""" % locals())
 
 
@@ -263,6 +321,8 @@ application = tornado.web.Application([
     (r"/pages", PageHandler),
     (r"/page/([^/]+)", PageHandler),
     (r"/thumbnail/([^/]+)", ThumbnailHandler),
+    (r"/export/([^\.]+)\.(.+)", ExportHandler),
+    (r"/export/([^\.]+)", ExportHandler),
 ], **settings)
 
 if __name__ == "__main__":
