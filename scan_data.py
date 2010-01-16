@@ -5,9 +5,10 @@
 # data model for scan_server
 
 import dbm
-import pickle
+import json
 import uuid
 import copy
+import pymongo
 
 from functools import partial
 
@@ -91,100 +92,93 @@ class Page:
   def indices(self):
     return [(self.filename, self.key())]
 
+def get_documents(db):
+    docs = []
+    mdb_docs = db.documents
+    for entry in mdb_docs.find(fields=["_id"]):
+      docs.append(read_document(entry["_id"], db))
+
+    docs.sort(key = lambda doc: doc.name)
+    return docs
+
 def read_page(key, db):
-  if not key in db:
+  mdb_pages = db.pages
+  page = mdb_pages.find_one({"_id" : key})
+  if not page:
     raise Exception("key %s is not in database" % key)
 
-  page = pickle.loads(db[key])
-  page.db = db
-  return page
+  pageobj = Page(db, filename=page['filename'])
+  pageobj._document_key = page['document']
+  pageobj._key = page['_id']
+
+  return pageobj
 
 def read_document(key, db):
-  if not key in db:
+  mdb_docs = db.documents
+  doc = mdb_docs.find_one({"_id" : key})
+  if not key:
     raise Exception("key %s is not in database" % key)
 
-  doc = pickle.loads(db[key])
-  doc.db = db
-  return doc
+  docobj = Document(db, name=doc['name'], tags=doc['tags'])
+  docobj._page_keys = doc['pages']
+  docobj._key = doc['_id']
+  return docobj
 
-def read_tag(tag, db):
-  if not tag in db:
-    return []
+def doc2json(doc):
+  data = {}
+  data['_id'] = doc.key()
+  data['pages'] = [ page.key() for page in doc.pages() ]
+  data['name'] = doc.name
+  data['tags'] = doc.tags or []
 
-  results = []
-  for item_key in pickle.loads(db[tag]):
-    item = pickle.loads(db[item_key])
-    item.db = db
-    results.append(item)
-  return results
+  return data
+
+def page2json(page):
+  data = {}
+  data['_id'] = page.key()
+  data['document'] = page.document().key()
+  data['filename'] = page.filename
+
+  return data
 
 def write_document(doc, db):
-  # we change doc to make it serialize efficiently with its indices
-  # so we make a copy to not mess up what the user gave us
-  _doc = copy.copy(doc)
-  pages = _doc.pages()
-  del _doc._pages
-  del _doc.db
+  mdb_docs = db.documents
 
-  # turn the pages into page keys
-  _doc._page_keys = [ page.key() for page in pages ]
-
-  # if the old document exists, retrieve it so we can remove its indices
-  # later
-  old_doc = None
-  if _doc.key() in db:
-    old_doc = pickle.loads(db[_doc.key()])
-
-  # save the actual document and it's page keys
-  db[_doc.key()] = pickle.dumps(_doc)
+  # save the document
+  mdb_docs.save(doc2json(doc))
 
   # save the pages
-  for page in pages:
-    _page = copy.copy(page)
-    _page._document_key = _page.document().key()
-    del _page._document
-    del _page.db
-    db[_page.key()] = pickle.dumps(_page)
-
-  # re-write the indices
-  if old_doc:
-    for ind in old_doc.indices():
-      entries = pickle.loads(db[ind[0]])
-      entries.remove(ind[1])
-      db[ind[0]] = pickle.dumps(entries)
-
-  for ind in _doc.indices():
-    if not ind[0] in db:
-      print "first entry for %s" % ind[0]
-      db[ind[0]] = pickle.dumps([ ind[1] ])
-    else:
-      print "adding entry for %s" % ind[0]
-      entries = pickle.loads(db[ind[0]])
-      entries.append(ind[1])
-      db[ind[0]] = pickle.dumps(entries)
+  mdb_pages = db.pages
+  for page in doc.pages():
+    mdb_pages.save(page2json(page))
 
 # the test
 if __name__ == "__main__":
-  db = dbm.open("test", "c")
+  db = pymongo.Connection().test
 
-  d = Document(db, name="mortage-statement", tags=["bill", "important", "home"])
+  tags = ["bill", "important", "home"]
+  d = Document(db, name="mortage-statement", tags=tags)
   p1 = Page(db, filename="file1", document=d)
   p2 = Page(db, filename="file2", document=d)
 
+  assert(d.tags == tags)
   write_document(d, db)
 
-
-  print "Document"
-  print db[d.key()]
-
-  print "Tag 'bill'"
-  print db[Document.TAG_PRE + "bill"]
-
   print "De-serialized document"
-  print "Result: %s" % read_document(d.key(), db)
+  doc = read_document(d.key(), db)
+  assert(doc.tags == tags)
+  print "Result: %s" % doc
+  for page in doc.pages():
+    print page.key(), "->", page.filename
 
-  print "De-serialized tag"
-  for item in read_tag(Document.TAG_PRE + "bill", db):
-    print "Item: %s" % item
+  p3 = Page(db, filename="another", document=doc)
+  assert(len(doc.pages()) == 3)
+  write_document(doc, db)
+  doc = read_document(doc.key(), db)
+  assert(len(doc.pages()) == 3)
+  assert(doc.tags == tags)
 
-  db.close()
+  #print "De-serialized tag"
+  #for item in read_tag(Document.TAG_PRE + "bill", db):
+  #  print "Item: %s" % item
+

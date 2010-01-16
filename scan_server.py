@@ -14,10 +14,10 @@ import re
 import math
 
 import scan_data
-import dbm
+import pymongo
 import zipfile
 
-db = dbm.open("scan_data", "c")
+db = pymongo.Connection().scanserver
 
 thumb_base_dir = "static/thumbnails"
 pagesized_base_dir = "static/pagesized"
@@ -37,6 +37,34 @@ def make_thumbnail(input, output, target_width):
   scale_factor = math.floor(base_resolution[0] / target_width)
   target_scale = (target_width, base_resolution[1] / scale_factor)
   subprocess.Popen(["convert", "-scale", "%dx%d" % target_scale, input, output]).communicate()
+
+def make_pagesized_thumbnail(key, filename=None):
+  if not filename:
+    filename = "static/%s.png" % key
+
+  if not os.path.isdir(pagesized_base_dir):
+    os.mkdir(pagesized_base_dir)
+  pagesized_path = "%s/%s.png" % (pagesized_base_dir, key)
+  if not os.path.exists(pagesized_path):
+    make_thumbnail(filename, pagesized_path, 1024)
+  return pagesized_path
+
+def orphaned_files(db, dir):
+  docs = scan_data.get_documents(db)
+  doc_pks = set()
+  for doc in docs:
+    doc_pks.update([ page.key() for page in doc.pages() ])
+
+  file_pks = set()
+  for (base, dirs, files) in os.walk(dir):
+    # prevent recursion
+    del dirs[0:-1]
+
+    for file in files:
+      if file.startswith("page-"):
+        file_pks.add(os.path.splitext(file)[0])
+
+  return file_pks - doc_pks
 
 class ExportHandler(tornado.web.RequestHandler):
   def get(self, doc_key, format=None):
@@ -84,6 +112,57 @@ class ExportHandler(tornado.web.RequestHandler):
     self.set_header("Content-Transfer_encoding", "binary")
     result = open(output_path)
     self.write(result.read())
+
+class OrphanHandler(tornado.web.RequestHandler):
+  def get_all(self):
+    "list all orphans"
+    orphan_keys = orphaned_files(db, "static/")
+    num_orphans = len(orphan_keys)
+
+    # build the image html
+    imghtml = []
+    for ok in orphan_keys:
+      imghtml.append("<a href=\"/orphan/%s\"><img src=\"thumbnail/%s\" /></a>" % (ok, ok))
+    imghtml = "\n\t".join(imghtml)
+
+    self.set_header("Content-Type", "text/html")
+    self.write("""
+    <html>
+    <head>
+    <title>Orphaned Files</title>
+    </head>
+    <body>
+    <h1>%(num_orphans)d Orphaned Files</h1>
+    %(imghtml)s
+    </body>
+    </html>""" % locals())
+
+  def get(self, page_key=None):
+    "modify a specific orphan"
+
+    if not page_key:
+      return self.get_all()
+
+    pagesized_path = make_pagesized_thumbnail(page_key)
+
+    control_html = """
+    Add to existing document<br/>
+    Create new document<br/>
+    Remove from disk
+    """
+
+    self.set_header("Content-Type", "text/html")
+    self.write("""
+    <html><head><title>Modify orphaned page</title></head>
+    <body>
+    <h1>%(page_key)s</h1>
+    %(control_html)s
+    <hr />
+    <img src="/%(pagesized_path)s" />
+    <hr />
+    %(control_html)s
+    <hr />
+    """ % locals())
 
 class PageHandler(tornado.web.RequestHandler):
   def get(self):
@@ -133,11 +212,7 @@ class PageHandler(tornado.web.RequestHandler):
       next_link = "<a href=\"/page/%s\">&gt&gt</a>" % doc.pages()[index].key()
 
     # build a page sized image if necessary
-    if not os.path.isdir(pagesized_base_dir):
-      os.mkdir(pagesized_base_dir)
-    pagesized_path = "%s/%s.png" % (pagesized_base_dir, page.key())
-    if not os.path.exists(pagesized_path):
-      make_thumbnail(filename, pagesized_path, 1024)
+    pagesized_path = make_pagesized_thumbnail(page.key(), filename)
 
     controls = """
     <a href="/document/%(doc_key)s">Back to Document</a><br/>
@@ -178,21 +253,13 @@ class ThumbnailHandler(tornado.web.RequestHandler):
 class DocumentHandler(tornado.web.RequestHandler):
   def single_get(self):
     "retrieve the list of documents"
-    docs = []
-    for key in db.keys():
-      if key.startswith("document-"):
-        docs.append(scan_data.read_document(key, db))
-    docs.sort(key = lambda doc: doc.name)
+    docs = scan_data.get_documents(db)
 
     doc_html = []
     num_docs = len(docs)
     for doc in docs:
       pages = doc.pages()
-      pages_str = "no pages"
-      if len(pages) > 1:
-        pages_str = "(%d pages)" % len(pages)
-      elif len(pages) == 1:
-        pages_str = "(1 page)"
+      pages_str = self._pluralify(len(pages), "page", "pages")
 
       doc_html.append("<li><a href=\"/document/%s\">%s</a> %s</li>" % (doc.key(), doc.name, pages_str))
     doc_html = "\t" + "\n\t".join(doc_html)
@@ -256,6 +323,13 @@ class DocumentHandler(tornado.web.RequestHandler):
     %(controls)s
     </html>""" % locals())
 
+  def _pluralify(self, cnt, single, plural):
+    if cnt == 0:
+      return "no " + plural
+    elif cnt == 1:
+      return "1 " + single
+    else:
+      return "%d %s" % (cnt, plural)
 
   def single_post(self):
     "create a new document"
@@ -323,6 +397,8 @@ application = tornado.web.Application([
     (r"/thumbnail/([^/]+)", ThumbnailHandler),
     (r"/export/([^\.]+)\.(.+)", ExportHandler),
     (r"/export/([^\.]+)", ExportHandler),
+    (r"/orphans", OrphanHandler),
+    (r"/orphan/([^/]+)", OrphanHandler),
 ], **settings)
 
 if __name__ == "__main__":
