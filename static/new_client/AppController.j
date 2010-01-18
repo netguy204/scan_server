@@ -120,8 +120,17 @@
 	[rightView setBackgroundColor: [CPColor colorWithRed:213.0/255 green:221.0/255.0 blue:230.0/255.0 alpha:1.0]];
 
 	var rvBounds = [rightView bounds];
+
+	var rvBottom = CGRectGetHeight(rvBounds);
+	pageControls = [[PageControls alloc] initWithFrame:CGRectMake(0,0,CGRectGetWidth(rvBounds), 54)];
+	[pageControls setBackgroundColor: [CPColor colorWithCalibratedWhite:0.25 alpha:1.0]];
+	[pageControls setAutoresizingMask:CPViewWidthSizable|CPViewMaxYMargin];
+	[pageControls setDelegate:self];
+	[pageControls buildPageControlsFor:nil];
+	[rightView addSubview:pageControls];
+
 	
-	var rightScrollView = [[CPScrollView alloc] initWithFrame:CGRectMake(0,0,CGRectGetWidth(rvBounds),CGRectGetHeight(rvBounds)-54)],
+	var rightScrollView = [[CPScrollView alloc] initWithFrame:CGRectMake(0,54,CGRectGetWidth(rvBounds),CGRectGetHeight(rvBounds)-54)],
 	    rsvBounds = [rightScrollView bounds];
 
 	[rightScrollView setAutoresizingMask:CPViewHeightSizable|CPViewWidthSizable ];
@@ -129,7 +138,8 @@
 	
 	rightCollection = [[CPCollectionView alloc] initWithFrame:CGRectMake(0,0,CGRectGetWidth(rsvBounds),0)];
 	[rightCollection setDelegate:self];
-	var rcItemSz = CGSizeMake(CGRectGetWidth(rsvBounds), CGRectGetHeight(rsvBounds));
+
+	var rcItemSz = CGSizeMake(CGRectGetWidth(rsvBounds), CGRectGetHeight(rsvBounds)-40);
 	[rightCollection setMinItemSize:rcItemSz];
 	[rightCollection setMaxItemSize:rcItemSz];
 	[rightCollection setMaxNumberOfColumns:1];
@@ -142,15 +152,6 @@
 
 	[rightScrollView setDocumentView:rightCollection];
 	[rightView addSubview:rightScrollView];
-
-	var rvBottom = CGRectGetHeight(rvBounds);
-
-	pageControls = [[PageControls alloc] initWithFrame:CGRectMake(0,rvBottom-54,CGRectGetWidth(rvBounds), 54)];
-	[pageControls setBackgroundColor: [CPColor colorWithCalibratedWhite:0.25 alpha:1.0]];
-	[pageControls setAutoresizingMask:CPViewWidthSizable|CPViewMinYMargin];
-	[pageControls setDelegate:self];
-	[pageControls buildPageControlsFor:nil];
-	[rightView addSubview:pageControls];
 
 	// build the left pane
 	var leftScrollView = [[CPScrollView alloc] initWithFrame:CGRectMake(0,0,200, CGRectGetHeight(svBounds))],
