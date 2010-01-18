@@ -68,6 +68,15 @@ def orphaned_files(db, dir):
 
   return file_pks - doc_pks
 
+def page_to_dict(page):
+  return { 'key' : page.key(), 'filename' : page.filename }
+
+def pages_to_dict(pages):
+  return [ page_to_dict(page) for page in pages ]
+
+def doc_to_dict(doc):
+  return { 'name' : doc.name, 'key' : doc.key(), 'pages' : pages_to_dict(doc.pages()) }
+
 class ExportHandler(tornado.web.RequestHandler):
   def get(self, doc_key, format=None):
     "get a document in a specific format"
@@ -277,15 +286,6 @@ class DocumentHandler(tornado.web.RequestHandler):
       return self.format_all_html(docs)
 
   def format_all_json(self, docs):
-    def page_to_dict(page):
-      return { 'key' : page.key(), 'filename' : page.filename }
-
-    def pages_to_dict(pages):
-      return [ page_to_dict(page) for page in pages ]
-
-    def doc_to_dict(doc):
-      return { 'name' : doc.name, 'key' : doc.key(), 'pages' : pages_to_dict(doc.pages()) }
-
     doc_json = json.dumps([ doc_to_dict(doc) for doc in docs ])
     callback = self.get_argument("jsoncallback", None)
     if callback:
@@ -397,13 +397,20 @@ class ScanHandler(tornado.web.RequestHandler):
     doc = scan_data.read_document(doc_id, db)
     page = scan_data.Page(db, document=doc)
     page.filename = "static/%s.png" % page.key()
-
     img_pipe = start_scan(page.filename)
+    scan_data.write_document(doc, db)
+
+    # if client wants json return the modified document
+    format = self.get_argument("format", None)
+    if format and format == "json":
+      self.set_header("Content-Type", "text/javascript")
+      self.write(doc_to_dict(doc))
+      img_pipe.close()
+      return
+
     self.set_header("Content-Type", "image/png")
     for chunk in img_pipe:
       self.write(chunk)
-
-    scan_data.write_document(doc, db)
 
 class MainHandler(tornado.web.RequestHandler):
   def get(self, doc_id=None):

@@ -9,6 +9,74 @@
 @import <Foundation/CPObject.j>
 
 
+@implementation PageControls : CPView
+{
+	CPButton scanButton;
+	CPButton deleteButton;
+
+	CPIndexSet selectedPages;
+	CPTextField pageNum;
+}
+
+- (void)buildPageControlsFor:(CPIndexSet)aIndexSet {
+	if(!scanButton) {
+		var pcBounds = [self bounds];
+		scanButton = [[CPButton alloc] initWithFrame:CGRectMakeZero()];
+		//CGRectMake(CGRectGetWidth(pcBounds)-100,10,90,CGRectGetHeight(pcBounds)-20)];
+		[scanButton setTitle:@"Scan Page"];
+		[scanButton sizeToFit];
+		var bBounds = [scanButton bounds];
+		var buttonTop = (CGRectGetHeight(pcBounds) - CGRectGetHeight(bBounds)) / 2.0;
+		var bNextX = 10;
+
+		[scanButton setFrameOrigin: CGPointMake(bNextX, buttonTop)];
+		[scanButton setTarget:self];
+		[scanButton setAction:@selector(scan:)];
+
+		bNextX += CGRectGetWidth([scanButton bounds]) + 10;
+
+		deleteButton = [[CPButton alloc] initWithFrame:CGRectMakeZero()];
+		[deleteButton setTitle:@"Remove Page"];
+		[deleteButton sizeToFit];
+		[deleteButton setFrameOrigin: CGPointMake(bNextX, buttonTop)];
+		[deleteButton setTarget:self];
+		[deleteButton setAction:@selector(remove:)];
+		bNextX += CGRectGetWidth([deleteButton bounds]) + 10;
+
+		pageNum = [[CPTextField alloc] initWithFrame:CGRectMakeZero()];
+		[pageNum setStringValue:@"No pages selected"];
+		[pageNum setFont:[CPFont boldSystemFontOfSize:16.0]];
+		[pageNum setTextColor:[CPColor whiteColor]];
+		[pageNum sizeToFit];
+		[pageNum setFrameOrigin: CGPointMake(bNextX, buttonTop)];
+	}
+
+	if(!aIndexSet || [aIndexSet count] == 0) {
+		[scanButton removeFromSuperview];
+		[deleteButton removeFromSuperview];
+		[pageNum removeFromSuperview];
+	} else {
+		selectedPages = aIndexSet;
+		var modPageNum = [selectedPages firstIndex] + 1;
+		[pageNum setStringValue:[CPString stringWithFormat:@"Page %d", modPageNum]];
+		[self addSubview:scanButton];
+		[self addSubview:deleteButton];
+		[self addSubview:pageNum];
+	}
+}
+
+- (void)scan:(id)sender
+{
+	alert("scanning page for " + [selectedPages firstIndex]);
+}
+
+- (void)remove:(id)sender
+{
+	alert("deleting page for " + [selectedPages firstIndex]);
+}
+
+@end
+
 @implementation AppController : CPObject
 {
 	CPDictionary photosets;
@@ -18,38 +86,9 @@
 	CPCollectionView rightCollection;
 
 	CPView pageControls;
-}
 
-- (void)buildPageControls {
-	var rvBounds = [rightView bounds],
-	    bottom = CGRectGetHeight(rvBounds);
-
-	pageControls = [[CPView alloc] initWithFrame:CGRectMake(0,bottom-54,CGRectGetWidth(rvBounds), 54)];
-	[pageControls setBackgroundColor: [CPColor colorWithCalibratedWhite:0.25 alpha:1.0]];
-	[pageControls setAutoresizingMask:CPViewWidthSizable|CPViewMinYMargin];
-
-	var pcBounds = [pageControls bounds];
-
-	var scanButton = [[CPButton alloc] initWithFrame:CGRectMakeZero()];
-	//CGRectMake(CGRectGetWidth(pcBounds)-100,10,90,CGRectGetHeight(pcBounds)-20)];
-	[scanButton setTitle:@"Scan Page"];
-	[scanButton sizeToFit];
-	var bBounds = [scanButton bounds];
-	var buttonTop = (CGRectGetHeight(pcBounds) - CGRectGetHeight(bBounds)) / 2.0;
-	var bNextX = 10;
-
-	[scanButton setFrameOrigin: CGPointMake(bNextX, buttonTop)];
-	[pageControls addSubview:scanButton];
-	bNextX += CGRectGetWidth([scanButton bounds]) + 10;
-
-	var deleteButton = [[CPButton alloc] initWithFrame:CGRectMakeZero()];
-	[deleteButton setTitle:@"Delete Page"];
-	[deleteButton sizeToFit];
-	[deleteButton setFrameOrigin: CGPointMake(bNextX, buttonTop)];
-	[pageControls addSubview:deleteButton];
-	bNextX += CGRectGetWidth([deleteButton bounds]) + 10;
-
-	[rightView addSubview:pageControls];
+	DataModel dataModel;
+	CPDictionary documentData;
 }
 
 - (void)applicationDidFinishLaunching:(CPNotification)aNotification
@@ -79,7 +118,7 @@
 	var rightScrollView = [[CPScrollView alloc] initWithFrame:CGRectMake(0,0,CGRectGetWidth(rvBounds),CGRectGetHeight(rvBounds)-54)],
 	    rsvBounds = [rightScrollView bounds];
 
-	[rightScrollView setAutoresizingMask:CPViewHeightSizable|CPViewWidthSizable|CPViewMinYMargin ];
+	[rightScrollView setAutoresizingMask:CPViewHeightSizable|CPViewWidthSizable ];
 	[rightScrollView setAutohidesScrollers:YES];
 	
 	rightCollection = [[CPCollectionView alloc] initWithFrame:CGRectMake(0,0,CGRectGetWidth(rsvBounds),0)];
@@ -97,6 +136,14 @@
 
 	[rightScrollView setDocumentView:rightCollection];
 	[rightView addSubview:rightScrollView];
+
+	var rvBottom = CGRectGetHeight(rvBounds);
+
+	pageControls = [[PageControls alloc] initWithFrame:CGRectMake(0,rvBottom-54,CGRectGetWidth(rvBounds), 54)];
+	[pageControls setBackgroundColor: [CPColor colorWithCalibratedWhite:0.25 alpha:1.0]];
+	[pageControls setAutoresizingMask:CPViewWidthSizable|CPViewMinYMargin];
+	[pageControls buildPageControlsFor:nil];
+	[rightView addSubview:pageControls];
 
 	// build the left pane
 	var leftScrollView = [[CPScrollView alloc] initWithFrame:CGRectMake(0,0,200, CGRectGetHeight(svBounds))],
@@ -118,7 +165,6 @@
 	[leftCollection setItemPrototype:photoItem];
 	[leftScrollView setDocumentView:leftCollection];
 
-	[self buildPageControls];
 	// fill in some test data
 	/*
 	[photosets setObject:@"test" forKey:@"test"];
@@ -154,32 +200,29 @@
     //[CPMenu setMenuBarVisible:YES];
 
 	// fetch the document data
-	var request = [CPURLRequest requestWithURL:"http://localhost:8000/documents?format=json"];
-	var connection = [CPJSONPConnection sendRequest:request callback:"jsoncallback" delegate:self];
+	dataModel = [[DataModel alloc] initWithDelegate:self];
 }
 
 - (void)collectionViewDidChangeSelection:(CPCollectionView)aCollectionView
 {
 	if(aCollectionView == leftCollection) {
 		var idx = [[leftCollection selectionIndexes] firstIndex],
-		    key = [leftCollection content][idx],
-			record = [photosets objectForKey:key];
+		    key = [leftCollection content][idx];
+		// using documentData instead of dataModel is a hack because I can't
+		// figure out what's broken
+		var record = [documentData objectForKey:key];
 
 		[rightCollection setContent:[[CPArray alloc] initWithArray:record.pages]];
+		[rightCollection setSelectionIndexes: [CPIndexSet indexSet]];
+	} else if(aCollectionView == rightCollection) {
+		[pageControls buildPageControlsFor:[rightCollection selectionIndexes]];
 	}
 }
 
-- (void)connection:(CPJSONPConnection)aConnection didReceiveData:(CPString)data
+- (void)documentsDidChange:(CPDictionary)aDict
 {
-	for (var i = 0; i < data.length; i++) {
-		[photosets setObject:data[i] forKey:data[i].name]
-	}
-	[leftCollection setContent:[[photosets allKeys] copy]];
-}
-
-- (void)connection:(CPJSONPConnection)aConnection didFailWithError:(CPString)error
-{
-	alert("error: "  + error);
+	documentData = aDict;
+	[leftCollection setContent:[[aDict allKeys] copy]];
 }
 
 @end
@@ -217,8 +260,12 @@
 
 	if(flag) {
 		[self addSubview:highlightView positioned:CPWindowBelow relativeTo:textField];
+		[textField setTextColor:[CPColor whiteColor]];
+		[textField setTextShadowColor:[CPColor blackColor]];
 	} else {
 		[highlightView removeFromSuperview];
+		[textField setTextColor:[CPColor blackColor]];
+		[textField setTextShadowColor:[CPColor whiteColor]];
 	}
 }
 
@@ -227,6 +274,38 @@
 @implementation DataModel : CPObject
 {
 	CPDictionary data;
+	id _delegate;
+}
+
+- (void)initWithDelegate:(id)aDelagate
+{
+	_delegate = aDelagate;
+	data = [[CPDictionary alloc] init];
+	var request = [CPURLRequest requestWithURL:"/documents?format=json"];
+	var connection = [CPURLConnection connectionWithRequest:request delegate:self];
+}
+
+- (void)connection:(CPURLConnection)aConnection didReceiveData:(CPString)jsondata
+{
+	jsondata = eval(jsondata);
+	for (var i = 0; i < jsondata.length; i++) {
+		[data setObject:jsondata[i] forKey:jsondata[i].name]
+	}
+	[_delegate documentsDidChange:data]
+}
+
+- (void)connection:(CPURLConnection)aConnection didFailWithError:(CPString)error
+{
+	alert("error: "  + error);
+}
+
+- (JSObject)getPages:(CPString)aString
+{
+	alert("getPagesForDocument");
+	var record = [data objectForKey:aString];
+	alert(aString);
+	alert(record);
+	return record;
 }
 
 @end
@@ -235,6 +314,7 @@
 {
 	CPImageView imageView;
 	CPImage image;
+	CPView highlightView;
 }
 
 - (void)setRepresentedObject:(JSObject)anObject
@@ -249,7 +329,7 @@
 	}
 
 	var pickey = anObject.key;
-	var picfile = "http://localhost:8000/thumbnail/" + pickey + "?format=pagesized";
+	var picfile = "/thumbnail/" + pickey + "?format=pagesized";
 	var pgImage = [[CPImage alloc] initWithContentsOfFile:picfile];
 
 	if([pgImage loadStatus] == CPImageLoadStatusCompleted) {
@@ -262,7 +342,18 @@
 
 - (void)setSelected:(BOOL)flag
 {
-	// ignore for now
+	if(!highlightView) {
+		highlightView = [[CPView alloc] initWithFrame:[self bounds]];
+		[highlightView setBackgroundColor:[CPColor colorWithCalibratedWhite:0.8 alpha:1.0]];
+		[highlightView setAutoresizingMask:CPViewWidthSizable|CPViewHeightSizable];
+	}
+
+	if(flag) {
+		[highlightView setFrame:[self bounds]];
+		[self addSubview:highlightView positioned:CPWindowBelow relativeTo:imageView];
+	} else {
+		[highlightView removeFromSuperview];
+	}
 }
 
 - (void)imageDidLoad:(CPImage)anImage
