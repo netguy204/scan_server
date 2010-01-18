@@ -16,9 +16,16 @@
 
 	CPIndexSet selectedPages;
 	CPTextField pageNum;
+	id _delegate;
 }
 
-- (void)buildPageControlsFor:(CPIndexSet)aIndexSet {
+- (void)setDelegate:(id)aDelegate
+{
+	_delegate = aDelegate;
+}
+
+- (void)buildPageControlsFor:(CPIndexSet)aIndexSet
+{
 	if(!scanButton) {
 		var pcBounds = [self bounds];
 		scanButton = [[CPButton alloc] initWithFrame:CGRectMakeZero()];
@@ -67,12 +74,12 @@
 
 - (void)scan:(id)sender
 {
-	alert("scanning page for " + [selectedPages firstIndex]);
+	[_delegate scan];
 }
 
 - (void)remove:(id)sender
 {
-	alert("deleting page for " + [selectedPages firstIndex]);
+	[_delegate remove:selectedPages];
 }
 
 @end
@@ -88,7 +95,6 @@
 	CPView pageControls;
 
 	DataModel dataModel;
-	CPDictionary documentData;
 }
 
 - (void)applicationDidFinishLaunching:(CPNotification)aNotification
@@ -142,6 +148,7 @@
 	pageControls = [[PageControls alloc] initWithFrame:CGRectMake(0,rvBottom-54,CGRectGetWidth(rvBounds), 54)];
 	[pageControls setBackgroundColor: [CPColor colorWithCalibratedWhite:0.25 alpha:1.0]];
 	[pageControls setAutoresizingMask:CPViewWidthSizable|CPViewMinYMargin];
+	[pageControls setDelegate:self];
 	[pageControls buildPageControlsFor:nil];
 	[rightView addSubview:pageControls];
 
@@ -207,13 +214,11 @@
 {
 	if(aCollectionView == leftCollection) {
 		var idx = [[leftCollection selectionIndexes] firstIndex],
-		    key = [leftCollection content][idx];
-		// using documentData instead of dataModel is a hack because I can't
-		// figure out what's broken
-		var record = [documentData objectForKey:key];
+		    record = [leftCollection content][idx];
 
-		[rightCollection setContent:[[CPArray alloc] initWithArray:record.pages]];
 		[rightCollection setSelectionIndexes: [CPIndexSet indexSet]];
+		[rightCollection setContent:[[CPArray alloc] initWithArray:record.pages]];
+
 	} else if(aCollectionView == rightCollection) {
 		[pageControls buildPageControlsFor:[rightCollection selectionIndexes]];
 	}
@@ -221,8 +226,21 @@
 
 - (void)documentsDidChange:(CPDictionary)aDict
 {
-	documentData = aDict;
-	[leftCollection setContent:[[aDict allKeys] copy]];
+	[leftCollection setContent:[[aDict allValues] copy]];
+	[self collectionViewDidChangeSelection:leftCollection];
+}
+
+- (void)scan
+{
+	alert("scanning page");
+}
+
+- (void)remove:(CPIndexSet)selectedPages
+{
+	var idx = [selectedPages firstIndex],
+	    record = [rightCollection content][idx];
+
+	[dataModel removePage:record.key];
 }
 
 @end
@@ -245,7 +263,7 @@
 		[self addSubview:textField];
 	}
 
-	[textField setStringValue:anObject];
+	[textField setStringValue:anObject.name];
 	[textField sizeToFit];
 	[textField setCenter:[self center]];
 }
@@ -271,45 +289,6 @@
 
 @end
 
-@implementation DataModel : CPObject
-{
-	CPDictionary data;
-	id _delegate;
-}
-
-- (void)initWithDelegate:(id)aDelagate
-{
-	_delegate = aDelagate;
-	data = [[CPDictionary alloc] init];
-	var request = [CPURLRequest requestWithURL:"/documents?format=json"];
-	var connection = [CPURLConnection connectionWithRequest:request delegate:self];
-}
-
-- (void)connection:(CPURLConnection)aConnection didReceiveData:(CPString)jsondata
-{
-	jsondata = eval(jsondata);
-	for (var i = 0; i < jsondata.length; i++) {
-		[data setObject:jsondata[i] forKey:jsondata[i].name]
-	}
-	[_delegate documentsDidChange:data]
-}
-
-- (void)connection:(CPURLConnection)aConnection didFailWithError:(CPString)error
-{
-	alert("error: "  + error);
-}
-
-- (JSObject)getPages:(CPString)aString
-{
-	alert("getPagesForDocument");
-	var record = [data objectForKey:aString];
-	alert(aString);
-	alert(record);
-	return record;
-}
-
-@end
-
 @implementation PageCell : CPView
 {
 	CPImageView imageView;
@@ -320,7 +299,6 @@
 - (void)setRepresentedObject:(JSObject)anObject
 {
 	if(!imageView) {
-		//alert(CGRectGetWidth([self bounds]) + ", " + CGRectGetHeight([self bounds]));
 		imageView = [[CPImageView alloc] initWithFrame: [self bounds]];
 		[imageView setAutoresizingMask:CPViewWidthSizable|CPViewHeightSizable];
 		[imageView setImageScaling:CPScaleProportionally];
@@ -362,3 +340,75 @@
 }
 
 @end
+
+@implementation DataModel : CPObject
+{
+	CPDictionary data;
+	id _delegate;
+}
+
+- (DataModel)initWithDelegate:(id)aDelagate
+{
+	_delegate = aDelagate;
+	data = [[CPDictionary alloc] init];
+	var request = [CPURLRequest requestWithURL:"/documents?format=json"];
+	var connection = [CPURLConnection connectionWithRequest:request delegate:self];
+	return self;
+}
+
+- (void)removePage:(CPString)aKey
+{
+	// find the page
+	var docKeys = [data allKeys];
+	var docFound = NO;
+	for(var i = 0; i < docKeys.length; i++) {
+		var doc = [data objectForKey:docKeys[i]];
+
+		var num_pages = doc.pages.length;
+		for(var j = 0; j < num_pages; j++) {
+			if(doc.pages[j].key === aKey) {
+				if(j == 0) {
+					doc.pages = doc.pages.slice(1);
+				} else if (j == num_pages - 1) {
+					doc.pages = doc.pages.slice(0, num_pages-1);
+				} else {
+					doc.pages = doc.pages.slice(0,j).concat(doc.pages.slice(j+1));
+				}
+
+				docFound = YES;
+				break;
+			}
+		}
+
+		if(docFound) {
+			break;
+		}
+	}
+
+	if(docFound) {
+		[_delegate documentsDidChange:data]
+	}
+}
+
+- (JSObject)getPages:(CPString)aString
+{
+	var record = [data objectForKey:aString];
+	return record;
+}
+
+- (void)connection:(CPURLConnection)aConnection didReceiveData:(CPString)jsondata
+{
+	jsondata = eval(jsondata);
+	for (var i = 0; i < jsondata.length; i++) {
+		[data setObject:jsondata[i] forKey:jsondata[i].name]
+	}
+	[_delegate documentsDidChange:data]
+}
+
+- (void)connection:(CPURLConnection)aConnection didFailWithError:(CPString)error
+{
+	alert("error: "  + error);
+}
+
+@end
+
