@@ -17,6 +17,8 @@ import scan_data
 import pymongo
 import zipfile
 
+import json
+
 db = pymongo.Connection().scanserver
 
 thumb_base_dir = "static/thumbnails"
@@ -119,10 +121,16 @@ class OrphanHandler(tornado.web.RequestHandler):
     orphan_keys = orphaned_files(db, "static/")
     num_orphans = len(orphan_keys)
 
-    # build the image html
+    # build the image widgets
     imghtml = []
-    for ok in orphan_keys:
-      imghtml.append("<a href=\"/orphan/%s\"><img src=\"thumbnail/%s\" /></a>" % (ok, ok))
+    imghtml.append("<div id=\"log\"></div>")
+    imghtml.append("<div id=\"images\"></div>")
+    imghtml.append("<script>")
+    imghtml.append("var container = document.getElementById('images');")
+    imghtml.append("var documents = new scanserver.documents.Documents(\"/documents?format=json\");")
+    for key in orphan_keys:
+      imghtml.append("(new scanserver.orphan.Orphan(\"thumbnail/%s\", container, documents)).makeDom();" % key)
+    imghtml.append("</script>")
     imghtml = "\n\t".join(imghtml)
 
     self.set_header("Content-Type", "text/html")
@@ -130,6 +138,8 @@ class OrphanHandler(tornado.web.RequestHandler):
     <html>
     <head>
     <title>Orphaned Files</title>
+    <script src="/static/closure/goog/base.js"></script>
+    <script src="/static/js/orphan_controls.js"></script>
     </head>
     <body>
     <h1>%(num_orphans)d Orphaned Files</h1>
@@ -165,7 +175,7 @@ class OrphanHandler(tornado.web.RequestHandler):
     """ % locals())
 
 class PageHandler(tornado.web.RequestHandler):
-  def get(self):
+  def get_all(self):
     "retrieve all pages"
     pages = []
     for key in db.keys():
@@ -190,7 +200,7 @@ class PageHandler(tornado.web.RequestHandler):
     "modify a specific page"
 
     if not page_key:
-      return self.get()
+      return self.get_all()
 
     page = scan_data.read_page(page_key, db)
 
@@ -240,10 +250,15 @@ class ThumbnailHandler(tornado.web.RequestHandler):
     if not os.path.isdir(thumb_base_dir):
       os.mkdir(thumb_base_dir)
 
-    # if the file doesn't exist, create it
-    thumbnail_path = "%s/%s.png" % (thumb_base_dir, page_key)
-    if not os.path.exists(thumbnail_path):
-      make_thumbnail("static/%s.png" % page_key, thumbnail_path, 400)
+    thumbnail_path = None
+    format = self.get_argument("format", None)
+    if format and format == "pagesized":
+      thumbnail_path = make_pagesized_thumbnail(page_key)
+    else:
+      # if the file doesn't exist, create it
+      thumbnail_path = "%s/%s.png" % (thumb_base_dir, page_key)
+      if not os.path.exists(thumbnail_path):
+        make_thumbnail("static/%s.png" % page_key, thumbnail_path, 400)
 
     # serve the thumbnail
     self.set_header("Content-Type", "image/png")
@@ -255,6 +270,31 @@ class DocumentHandler(tornado.web.RequestHandler):
     "retrieve the list of documents"
     docs = scan_data.get_documents(db)
 
+    format = self.get_argument("format", None)
+    if format and format == "json":
+      return self.format_all_json(docs)
+    else:
+      return self.format_all_html(docs)
+
+  def format_all_json(self, docs):
+    def page_to_dict(page):
+      return { 'key' : page.key(), 'filename' : page.filename }
+
+    def pages_to_dict(pages):
+      return [ page_to_dict(page) for page in pages ]
+
+    def doc_to_dict(doc):
+      return { 'name' : doc.name, 'key' : doc.key(), 'pages' : pages_to_dict(doc.pages()) }
+
+    doc_json = json.dumps([ doc_to_dict(doc) for doc in docs ])
+    callback = self.get_argument("jsoncallback", None)
+    if callback:
+      doc_json = "%s(%s);" % (callback, doc_json)
+
+    self.set_header("Content-Type", "text/javascript")
+    self.write(doc_json)
+
+  def format_all_html(self, docs):
     doc_html = []
     num_docs = len(docs)
     for doc in docs:
@@ -337,7 +377,7 @@ class DocumentHandler(tornado.web.RequestHandler):
     name = self.get_argument("name")
 
     tag_re = re.compile("[\w,;]+")
-    tags = self.get_argument("tags").split(" ")
+    tags = self.get_argument("tags", "").split(" ")
 
     doc = scan_data.Document(db, name = name, tags = tags)
     scan_data.write_document(doc, db)
