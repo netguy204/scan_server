@@ -13,6 +13,7 @@
 {
 	CPButton scanButton;
 	CPButton deleteButton;
+	CPButton moveButton;
 
 	CPIndexSet selectedPages;
 	CPTextField pageNum;
@@ -31,7 +32,7 @@
 		var pcBounds = [self bounds];
 
 		scanButton = [[CPButton alloc] initWithFrame:CGRectMakeZero()];
-		[scanButton setTitle:@"Scan Page"];
+		[scanButton setTitle:@"New Scan"];
 		[scanButton sizeToFit];
 		var bBounds = [scanButton bounds];
 		var buttonTop = (CGRectGetHeight(pcBounds) - CGRectGetHeight(bBounds)) / 2.0;
@@ -45,6 +46,15 @@
 		[deleteButton setTarget:self];
 		[deleteButton setAction:@selector(remove:)];
 		[deleteButton setAutoresizingMask:CPViewMaxXMargin];
+		bNextX += CGRectGetWidth([deleteButton bounds]) + 10;
+
+		moveButton = [[CPButton alloc] initWithFrame:CGRectMakeZero()];
+		[moveButton setTitle:@"Move Page"];
+		[moveButton sizeToFit];
+		[moveButton setTarget:self];
+		[moveButton setAction:@selector(move:)];
+		[moveButton setAutoresizingMask:CPViewMaxXMargin];
+		[moveButton setFrameOrigin: CGPointMake(bNextX, buttonTop)];
 		bNextX += CGRectGetWidth([deleteButton bounds]) + 10;
 
 		pageNum = [[CPTextField alloc] initWithFrame:CGRectMakeZero()];
@@ -73,12 +83,14 @@
 
 	if(!aIndexSet || [aIndexSet count] == 0) {
 		[deleteButton removeFromSuperview];
+		[moveButton removeFromSuperview];
 		[pageNum removeFromSuperview];
 	} else {
 		selectedPages = aIndexSet;
 		var modPageNum = [selectedPages firstIndex] + 1;
 		[pageNum setStringValue:[CPString stringWithFormat:@"Page %d", modPageNum]];
 		[self addSubview:deleteButton];
+		[self addSubview:moveButton];
 		[self addSubview:pageNum];
 	}
 }
@@ -91,6 +103,11 @@
 - (void)remove:(id)sender
 {
 	[_delegate remove:selectedPages];
+}
+
+- (void)move:(id)sender
+{
+	alert("dis donna work jis yet");
 }
 
 @end
@@ -242,7 +259,20 @@
 
 - (void)documentsDidChange:(CPDictionary)aDict
 {
-	[leftCollection setContent:[[aDict allValues] copy]];
+	var sortFunction = function(lhs, rhs) {
+		if(lhs.name == rhs.name) {
+			return CPOrderedSame;
+		} else if(lhs.name < rhs.name) {
+			return CPOrderedAscending;
+		} else {
+			return CPOrderedDescending;
+		}
+	}
+
+	var values = [[aDict allValues] copy];
+	[values sortUsingFunction:sortFunction context:nil];
+
+	[leftCollection setContent:values];
 	[self collectionViewDidChangeSelection:leftCollection];
 
 	// can stop the spinner
