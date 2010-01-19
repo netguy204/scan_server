@@ -29,19 +29,14 @@
 {
 	if(!scanButton) {
 		var pcBounds = [self bounds];
+
 		scanButton = [[CPButton alloc] initWithFrame:CGRectMakeZero()];
-		//CGRectMake(CGRectGetWidth(pcBounds)-100,10,90,CGRectGetHeight(pcBounds)-20)];
 		[scanButton setTitle:@"Scan Page"];
 		[scanButton sizeToFit];
 		var bBounds = [scanButton bounds];
 		var buttonTop = (CGRectGetHeight(pcBounds) - CGRectGetHeight(bBounds)) / 2.0;
+
 		var bNextX = 10;
-
-		[scanButton setFrameOrigin: CGPointMake(bNextX, buttonTop)];
-		[scanButton setTarget:self];
-		[scanButton setAction:@selector(scan:)];
-
-		bNextX += CGRectGetWidth([scanButton bounds]) + 10;
 
 		deleteButton = [[CPButton alloc] initWithFrame:CGRectMakeZero()];
 		[deleteButton setTitle:@"Remove Page"];
@@ -49,27 +44,40 @@
 		[deleteButton setFrameOrigin: CGPointMake(bNextX, buttonTop)];
 		[deleteButton setTarget:self];
 		[deleteButton setAction:@selector(remove:)];
+		[deleteButton setAutoresizingMask:CPViewMaxXMargin];
 		bNextX += CGRectGetWidth([deleteButton bounds]) + 10;
 
 		pageNum = [[CPTextField alloc] initWithFrame:CGRectMakeZero()];
-		[pageNum setStringValue:@"No pages selected"];
+		[pageNum setStringValue:@"Page 1"];
 		[pageNum setFont:[CPFont boldSystemFontOfSize:16.0]];
 		[pageNum setTextColor:[CPColor whiteColor]];
 		[pageNum sizeToFit];
-		[pageNum setFrameOrigin: CGPointMake(bNextX, buttonTop)];
+		[pageNum setCenter: [self center]];
+		[pageNum setAutoresizingMask:CPViewMinXMargin|CPViewMaxXMargin];
+
+		// reset to right side
+		var bNextX = CGRectGetWidth(pcBounds) - 20;
+		[scanButton setFrameOrigin: CGPointMake(bNextX-CGRectGetWidth(bBounds), buttonTop)];
+		[scanButton setTarget:self];
+		[scanButton setAction:@selector(scan:)];
+		[scanButton setAutoresizingMask:CPViewMinXMargin];
+		bNextX -= CGRectGetWidth(bBounds) - 10;
 	}
 
 	_theDoc = aDoc;
+	if(_theDoc) {
+		[self addSubview:scanButton];
+	} else {
+		[scanButton removeFromSuperview];
+	}
 
 	if(!aIndexSet || [aIndexSet count] == 0) {
-		[scanButton removeFromSuperview];
 		[deleteButton removeFromSuperview];
 		[pageNum removeFromSuperview];
 	} else {
 		selectedPages = aIndexSet;
 		var modPageNum = [selectedPages firstIndex] + 1;
 		[pageNum setStringValue:[CPString stringWithFormat:@"Page %d", modPageNum]];
-		[self addSubview:scanButton];
 		[self addSubview:deleteButton];
 		[self addSubview:pageNum];
 	}
@@ -166,8 +174,8 @@
 	leftCollection = [[CPCollectionView alloc] initWithFrame:CGRectMake(0,0,CGRectGetWidth(lsvBounds), 0)];
 
 	[leftCollection setDelegate:self];
-	[leftCollection setMinItemSize:CGSizeMake(20.0, 45.0)];
-	[leftCollection setMaxItemSize:CGSizeMake(1000.0, 45.0)];
+	[leftCollection setMinItemSize:CGSizeMake(20.0, 25.0)];
+	[leftCollection setMaxItemSize:CGSizeMake(1000.0, 25.0)];
 	[leftCollection setMaxNumberOfColumns:1];
 	[leftCollection setVerticalMargin:0.0];
 	[leftCollection setAutoresizingMask:CPViewWidthSizable ];
@@ -265,9 +273,9 @@
 - (void)setRepresentedObject:(JSObject)anObject
 {
 	if(!textField) {
-		textField = [[CPTextField alloc] initWithFrame:CGRectMakeZero()];
+		textField = [[CPTextField alloc] initWithFrame:CGRectInset([self bounds],2,2)];
 		[textField setFont:[CPFont systemFontOfSize:12.0]];
-		[textField setAutoresizingMask: CPViewMinXMargin|CPViewMaxXMargin|CPViewMinYMargin|CPViewMaxYMargin];
+		[textField setAutoresizingMask:CPViewWidthSizable|CPViewHeightSizable];
 		[textField setTextColor:[CPColor blackColor]];
 		[textField setTextShadowColor:[CPColor whiteColor]];
 		[textField setTextShadowOffset:CGSizeMake(1,1)];
@@ -275,15 +283,14 @@
 	}
 
 	[textField setStringValue:anObject.name];
-	[textField sizeToFit];
-	[textField setCenter:[self center]];
 }
 
 - (void)setSelected:(BOOL)flag
 {
 	if(!highlightView) {
 		highlightView = [[CPView alloc] initWithFrame:[self bounds]];
-		[highlightView setBackgroundColor:[CPColor grayColor]];
+		//[highlightView setBackgroundColor:[CPColor grayColor]];
+		[highlightView setBackgroundColor:[CPColor colorWithRed:200.0/255 green:210.0/255.0 blue:220.0/255.0 alpha:1.0]];
 		[highlightView setAutoresizingMask:CPViewWidthSizable];
 	}
 
@@ -291,10 +298,12 @@
 		[self addSubview:highlightView positioned:CPWindowBelow relativeTo:textField];
 		[textField setTextColor:[CPColor whiteColor]];
 		[textField setTextShadowColor:[CPColor blackColor]];
+		//[textField setTextFieldBackgroundColor:[CPColor colorWithRed:213.0/255 green:221.0/255.0 blue:230.0/255.0 alpha:1.0]];
 	} else {
 		[highlightView removeFromSuperview];
 		[textField setTextColor:[CPColor blackColor]];
 		[textField setTextShadowColor:[CPColor whiteColor]];
+		//[textField setTextFieldBackgroundColor:[CPColor colorWithCalibratedWhite:0.8 alpha:1.0]];
 	}
 }
 
