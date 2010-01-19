@@ -17,6 +17,7 @@
 	CPIndexSet selectedPages;
 	CPTextField pageNum;
 	id _delegate;
+	JSObject _theDoc;
 }
 
 - (void)setDelegate:(id)aDelegate
@@ -24,7 +25,7 @@
 	_delegate = aDelegate;
 }
 
-- (void)buildPageControlsFor:(CPIndexSet)aIndexSet
+- (void)buildPageControlsFor:(JSObject)aDoc withSelection:(CPIndexSet)aIndexSet
 {
 	if(!scanButton) {
 		var pcBounds = [self bounds];
@@ -58,6 +59,8 @@
 		[pageNum setFrameOrigin: CGPointMake(bNextX, buttonTop)];
 	}
 
+	_theDoc = aDoc;
+
 	if(!aIndexSet || [aIndexSet count] == 0) {
 		[scanButton removeFromSuperview];
 		[deleteButton removeFromSuperview];
@@ -74,7 +77,7 @@
 
 - (void)scan:(id)sender
 {
-	[_delegate scan];
+	[_delegate scanForDocument:_theDoc];
 }
 
 - (void)remove:(id)sender
@@ -93,6 +96,7 @@
 	CPCollectionView rightCollection;
 
 	CPView pageControls;
+	JSObject _selectedDocument;
 
 	DataModel dataModel;
 }
@@ -126,7 +130,7 @@
 	[pageControls setBackgroundColor: [CPColor colorWithCalibratedWhite:0.25 alpha:1.0]];
 	[pageControls setAutoresizingMask:CPViewWidthSizable|CPViewMaxYMargin];
 	[pageControls setDelegate:self];
-	[pageControls buildPageControlsFor:nil];
+	[pageControls buildPageControlsFor:nil withSelection:nil];
 	[rightView addSubview:pageControls];
 
 	
@@ -215,13 +219,16 @@
 {
 	if(aCollectionView == leftCollection) {
 		var idx = [[leftCollection selectionIndexes] firstIndex],
-		    record = [leftCollection content][idx];
-
+			record = [leftCollection content][idx];
+		_selectedDocument = record;
 		[rightCollection setSelectionIndexes: [CPIndexSet indexSet]];
-		[rightCollection setContent:[[CPArray alloc] initWithArray:record.pages]];
+
+		if(record) {
+			[rightCollection setContent:[[CPArray alloc] initWithArray:record.pages]];
+		}
 
 	} else if(aCollectionView == rightCollection) {
-		[pageControls buildPageControlsFor:[rightCollection selectionIndexes]];
+		[pageControls buildPageControlsFor:_selectedDocument withSelection:[rightCollection selectionIndexes]];
 	}
 }
 
@@ -229,11 +236,14 @@
 {
 	[leftCollection setContent:[[aDict allValues] copy]];
 	[self collectionViewDidChangeSelection:leftCollection];
+
+	// can stop the spinner
 }
 
-- (void)scan
+- (void)scanForDocument:(JSObject)aDoc
 {
-	alert("scanning page");
+	[dataModel scanForDocument:aDoc];
+	// TODO: turn on a spinner or something
 }
 
 - (void)remove:(CPIndexSet)selectedPages
@@ -346,14 +356,18 @@
 {
 	CPDictionary data;
 	id _delegate;
+
+	CPURLConnection documentConnection;
+	CPURLConnection scanConnection;
 }
 
 - (DataModel)initWithDelegate:(id)aDelagate
 {
 	_delegate = aDelagate;
 	data = [[CPDictionary alloc] init];
-	var request = [CPURLRequest requestWithURL:"/documents?format=json"];
-	var connection = [CPURLConnection connectionWithRequest:request delegate:self];
+	var DOCUMENT_URL = "/documents?format=json";
+	var request = [CPURLRequest requestWithURL:DOCUMENT_URL];
+	documentConnection = [CPURLConnection connectionWithRequest:request delegate:self];
 	return self;
 }
 
@@ -364,31 +378,28 @@
 	var docFound = NO;
 	for(var i = 0; i < docKeys.length; i++) {
 		var doc = [data objectForKey:docKeys[i]];
-
-		var num_pages = doc.pages.length;
-		for(var j = 0; j < num_pages; j++) {
-			if(doc.pages[j].key === aKey) {
-				if(j == 0) {
-					doc.pages = doc.pages.slice(1);
-				} else if (j == num_pages - 1) {
-					doc.pages = doc.pages.slice(0, num_pages-1);
-				} else {
-					doc.pages = doc.pages.slice(0,j).concat(doc.pages.slice(j+1));
-				}
-
-				docFound = YES;
-				break;
-			}
-		}
-
-		if(docFound) {
+		var newArray = removeItem(doc.pages, pageKeySelector, aKey);
+		if(newArray) {
+			doc.pages = newArray;
+			docFound = YES;
 			break;
 		}
 	}
 
+	var REMOVE_URL = "/remove/" + aKey + "?format=json";
+	var request = [CPURLRequest requestWithURL:REMOVE_URL];
+	var connection = [CPURLConnection connectionWithRequest:request delegate:self];
+
 	if(docFound) {
 		[_delegate documentsDidChange:data]
 	}
+}
+
+- (void)scanForDocument:(JSObject)aDoc
+{
+	var SCAN_URL = "/scan_";
+	var request = [CPURLRequest requestWithURL:SCAN_URL + aDoc.key + ".png?format=json"];
+	scanConnection = [CPURLConnection connectionWithRequest:request delegate:self];
 }
 
 - (JSObject)getPages:(CPString)aString
@@ -400,9 +411,25 @@
 - (void)connection:(CPURLConnection)aConnection didReceiveData:(CPString)jsondata
 {
 	jsondata = eval(jsondata);
-	for (var i = 0; i < jsondata.length; i++) {
-		[data setObject:jsondata[i] forKey:jsondata[i].name]
+	if(aConnection == documentConnection) {
+		// do something special
+	} else if(aConnection == scanConnection) {
+		// do something special
+	} else {
+		// alert("page removed!");
 	}
+
+	for (var i = 0; i < jsondata.length; i++) {
+		var oldObj = [data objectForKey:jsondata[i].key];
+		if(oldObj) {
+			// update the things that can change
+			oldObj.name = jsondata[i].name;
+			oldObj.pages = jsondata[i].pages;
+		} else {
+			[data setObject:jsondata[i] forKey:jsondata[i].key]
+		}
+	}
+
 	[_delegate documentsDidChange:data]
 }
 
@@ -412,4 +439,25 @@
 }
 
 @end
+
+// utility functions
+function removeItem(aList, aSelector, aItem) {
+	var num_items = aList.length;
+	for(var j = 0; j < num_items; j++) {
+		if(aSelector(aList[j]) === aItem) {
+			if(j == 0) {
+				return aList.slice(1);
+			} else if (j == num_items - 1) {
+				return aList.slice(0, num_items-1);
+			} else {
+				return aList.slice(0,j).concat(aList.slice(j+1));
+			}
+		}
+	}
+	return undefined;
+}
+
+function pageKeySelector(page) {
+	return page.key;
+}
 

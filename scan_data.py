@@ -39,14 +39,24 @@ class Document:
 
     return self._pages
 
-  def add_page(self, page):
-    page.set_document(self)
-
+  def ensure_pages(self):
     if not hasattr(self, "_pages"):
       self.pages()
 
+  def add_page(self, page):
+    self.ensure_pages()
+    page.set_document(self)
     self._pages.append(page)
 
+  def remove_page(self, page):
+    thePage = None
+    for aPage in self.pages():
+      if aPage.key() == page.key():
+        thePage = aPage
+        self._pages.remove(aPage)
+        break
+    return thePage
+    
   def key(self):
     return self._key
 
@@ -77,6 +87,9 @@ class Page:
     return self._key
 
   def set_document(self, doc):
+    if not doc:
+      self._document_key = None
+
     self._document = doc
 
   def document(self):
@@ -84,6 +97,9 @@ class Page:
       self._document = None
 
     if hasattr(self, "_document_key"):
+      if not self._document_key:
+        return None
+
       self._document = read_document(self._document_key, self.db)
       del self._document_key
 
@@ -100,6 +116,20 @@ def get_documents(db):
 
     docs.sort(key = lambda doc: doc.name)
     return docs
+
+def remove_page(key, db):
+  page = read_page(key, db)
+  doc = page.document()
+
+  if doc:
+    if not doc.remove_page(page):
+      print "couldn't find page in doc"
+      return None
+
+    write_document(doc, db)
+    return True
+  print "couldn't find doc"
+  return None
 
 def read_page(key, db):
   mdb_pages = db.pages
@@ -124,6 +154,7 @@ def read_document(key, db):
   docobj._key = doc['_id']
   return docobj
 
+# TODO: merge with _to_json functions in scan server
 def doc2json(doc):
   data = {}
   data['_id'] = doc.key()
@@ -136,7 +167,7 @@ def doc2json(doc):
 def page2json(page):
   data = {}
   data['_id'] = page.key()
-  data['document'] = page.document().key()
+  data['document'] = page.document() and page.document().key()
   data['filename'] = page.filename
 
   return data
@@ -148,9 +179,12 @@ def write_document(doc, db):
   mdb_docs.save(doc2json(doc))
 
   # save the pages
-  mdb_pages = db.pages
   for page in doc.pages():
-    mdb_pages.save(page2json(page))
+    write_page(page, db)
+
+def write_page(page, db):
+  mdb_pages = db.pages
+  mdb_pages.save(page2json(page))
 
 # the test
 if __name__ == "__main__":

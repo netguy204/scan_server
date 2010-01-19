@@ -183,6 +183,38 @@ class OrphanHandler(tornado.web.RequestHandler):
     <hr />
     """ % locals())
 
+class RemoveHandler(tornado.web.RequestHandler):
+  def get(self, key):
+    # what kind of key?
+    ispagekey = key.startswith("page-")
+    page = scan_data.read_page(key, db)
+    doc = page.document()
+
+    if not ispagekey:
+      print "not a page key"
+      return
+
+    if not scan_data.remove_page(page.key(), db):
+      print "remove failed"
+      return
+    
+    format = self.get_argument("format", None)
+    if format and format == "json":
+      self.set_header("Content-Type", "text/javascript")
+      if doc:
+        # reload the document to see the changes
+        doc = scan_data.read_document(doc.key(), db)
+        self.write(json.dumps([ doc_to_dict(doc) ]))
+      else:
+        # doc is missing from this page
+        print "odd, removed page with no document"
+        self.write(json.dumps([]))
+
+    else:
+      self.set_header("Content-Type", "text/html")
+      self.write("Page removed")
+
+
 class PageHandler(tornado.web.RequestHandler):
   def get_all(self):
     "retrieve all pages"
@@ -404,13 +436,13 @@ class ScanHandler(tornado.web.RequestHandler):
     format = self.get_argument("format", None)
     if format and format == "json":
       self.set_header("Content-Type", "text/javascript")
-      self.write(doc_to_dict(doc))
+      self.write(json.dumps([ doc_to_dict(doc) ]))
       img_pipe.close()
       return
-
-    self.set_header("Content-Type", "image/png")
-    for chunk in img_pipe:
-      self.write(chunk)
+    else:
+      self.set_header("Content-Type", "image/png")
+      for chunk in img_pipe:
+        self.write(chunk)
 
 class MainHandler(tornado.web.RequestHandler):
   def get(self, doc_id=None):
@@ -446,6 +478,7 @@ application = tornado.web.Application([
     (r"/export/([^\.]+)", ExportHandler),
     (r"/orphans", OrphanHandler),
     (r"/orphan/([^/]+)", OrphanHandler),
+    (r"/remove/([^/]+)", RemoveHandler),
 ], **settings)
 
 if __name__ == "__main__":
