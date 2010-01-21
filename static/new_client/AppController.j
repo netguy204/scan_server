@@ -1,124 +1,24 @@
 /*
  * AppController.j
- * NewApplication
+ * Scan Server
  *
- * Created by You on July 5, 2009.
- * Copyright 2009, Your Company All rights reserved.
+ * Created by Brian Taylor January 2010
+ * Copyright 2010, WuboNet
  */
 
 @import <Foundation/CPObject.j>
+@import "PageControls.j"
+@import "DocumentView.j"
+@import "PageView.j"
 
-
-@implementation PageControls : CPView
-{
-	CPButton scanButton;
-	CPButton deleteButton;
-	CPButton moveButton;
-
-	CPIndexSet selectedPages;
-	CPTextField pageNum;
-	id _delegate;
-	JSObject _theDoc;
-}
-
-- (void)setDelegate:(id)aDelegate
-{
-	_delegate = aDelegate;
-}
-
-- (void)buildPageControlsFor:(JSObject)aDoc withSelection:(CPIndexSet)aIndexSet
-{
-	if(!scanButton) {
-		var pcBounds = [self bounds];
-
-		scanButton = [[CPButton alloc] initWithFrame:CGRectMakeZero()];
-		[scanButton setTitle:@"New Scan"];
-		[scanButton sizeToFit];
-		var bBounds = [scanButton bounds];
-		var buttonTop = (CGRectGetHeight(pcBounds) - CGRectGetHeight(bBounds)) / 2.0;
-
-		var bNextX = 10;
-
-		deleteButton = [[CPButton alloc] initWithFrame:CGRectMakeZero()];
-		[deleteButton setTitle:@"Remove Page"];
-		[deleteButton sizeToFit];
-		[deleteButton setFrameOrigin: CGPointMake(bNextX, buttonTop)];
-		[deleteButton setTarget:self];
-		[deleteButton setAction:@selector(remove:)];
-		[deleteButton setAutoresizingMask:CPViewMaxXMargin];
-		bNextX += CGRectGetWidth([deleteButton bounds]) + 10;
-
-		moveButton = [[CPButton alloc] initWithFrame:CGRectMakeZero()];
-		[moveButton setTitle:@"Move Page"];
-		[moveButton sizeToFit];
-		[moveButton setTarget:self];
-		[moveButton setAction:@selector(move:)];
-		[moveButton setAutoresizingMask:CPViewMaxXMargin];
-		[moveButton setFrameOrigin: CGPointMake(bNextX, buttonTop)];
-		bNextX += CGRectGetWidth([deleteButton bounds]) + 10;
-
-		pageNum = [[CPTextField alloc] initWithFrame:CGRectMakeZero()];
-		[pageNum setStringValue:@"Page 1"];
-		[pageNum setFont:[CPFont boldSystemFontOfSize:16.0]];
-		[pageNum setTextColor:[CPColor whiteColor]];
-		[pageNum sizeToFit];
-		[pageNum setCenter: [self center]];
-		[pageNum setAutoresizingMask:CPViewMinXMargin|CPViewMaxXMargin];
-
-		// reset to right side
-		var bNextX = CGRectGetWidth(pcBounds) - 20;
-		[scanButton setFrameOrigin: CGPointMake(bNextX-CGRectGetWidth(bBounds), buttonTop)];
-		[scanButton setTarget:self];
-		[scanButton setAction:@selector(scan:)];
-		[scanButton setAutoresizingMask:CPViewMinXMargin];
-		bNextX -= CGRectGetWidth(bBounds) - 10;
-	}
-
-	_theDoc = aDoc;
-	if(_theDoc) {
-		[self addSubview:scanButton];
-	} else {
-		[scanButton removeFromSuperview];
-	}
-
-	if(!aIndexSet || [aIndexSet count] == 0) {
-		[deleteButton removeFromSuperview];
-		[moveButton removeFromSuperview];
-		[pageNum removeFromSuperview];
-	} else {
-		selectedPages = aIndexSet;
-		var modPageNum = [selectedPages firstIndex] + 1;
-		[pageNum setStringValue:[CPString stringWithFormat:@"Page %d", modPageNum]];
-		[self addSubview:deleteButton];
-		[self addSubview:moveButton];
-		[self addSubview:pageNum];
-	}
-}
-
-- (void)scan:(id)sender
-{
-	[_delegate scanForDocument:_theDoc];
-}
-
-- (void)remove:(id)sender
-{
-	[_delegate remove:selectedPages];
-}
-
-- (void)move:(id)sender
-{
-	alert("dis donna work jis yet");
-}
-
-@end
+DocumentDragType = "DocumentDragType";
 
 @implementation AppController : CPObject
 {
-	CPDictionary photosets;
-	CPCollectionView leftCollection;
+	DocumentView documentView;
 
 	CPView rightView;
-	CPCollectionView rightCollection;
+	PageView pageView;
 
 	CPView pageControls;
 	JSObject _selectedDocument;
@@ -130,8 +30,6 @@
 {
     var theWindow = [[CPWindow alloc] initWithContentRect:CGRectMakeZero() styleMask:CPBorderlessBridgeWindowMask],
         contentView = [theWindow contentView];
-
-	photosets = [CPDictionary dictionary];
 
 	var cvBounds = [contentView bounds],
 	    splitView = [[CPSplitView alloc] initWithFrame:CGRectMake(0,0, CGRectGetWidth(cvBounds), CGRectGetHeight(cvBounds))];
@@ -150,7 +48,6 @@
 
 	var rvBounds = [rightView bounds];
 
-	var rvBottom = CGRectGetHeight(rvBounds);
 	pageControls = [[PageControls alloc] initWithFrame:CGRectMake(0,0,CGRectGetWidth(rvBounds), 54)];
 	[pageControls setBackgroundColor: [CPColor colorWithCalibratedWhite:0.25 alpha:1.0]];
 	[pageControls setAutoresizingMask:CPViewWidthSizable|CPViewMaxYMargin];
@@ -159,103 +56,52 @@
 	[rightView addSubview:pageControls];
 
 	
-	var rightScrollView = [[CPScrollView alloc] initWithFrame:CGRectMake(0,54,CGRectGetWidth(rvBounds),CGRectGetHeight(rvBounds)-54)],
-	    rsvBounds = [rightScrollView bounds];
+	pageView = [[PageView alloc]
+		initWithFrame:CGRectMake(0,54,CGRectGetWidth(rvBounds),CGRectGetHeight(rvBounds)-54)
+		andDelegate:self];
 
-	[rightScrollView setAutoresizingMask:CPViewHeightSizable|CPViewWidthSizable ];
-	[rightScrollView setAutohidesScrollers:YES];
-	
-	rightCollection = [[CPCollectionView alloc] initWithFrame:CGRectMake(0,0,CGRectGetWidth(rsvBounds),0)];
-	[rightCollection setDelegate:self];
-
-	var rcItemSz = CGSizeMake(CGRectGetWidth(rsvBounds), CGRectGetHeight(rsvBounds)-40);
-	[rightCollection setMinItemSize:rcItemSz];
-	[rightCollection setMaxItemSize:rcItemSz];
-	[rightCollection setMaxNumberOfColumns:1];
-	[rightCollection setVerticalMargin:0.0];
-	[rightCollection setAutoresizingMask:CPViewWidthSizable];
-
-	var pageItem = [[CPCollectionViewItem alloc] init];
-	[pageItem setView:[[PageCell alloc] initWithFrame:CGRectMakeZero()]];
-	[rightCollection setItemPrototype:pageItem];
-
-	[rightScrollView setDocumentView:rightCollection];
-	[rightView addSubview:rightScrollView];
+	[pageView setAutoresizingMask:CPViewHeightSizable|CPViewWidthSizable ];
+	[rightView addSubview:pageView];
 
 	// build the left pane
-	var leftScrollView = [[CPScrollView alloc] initWithFrame:CGRectMake(0,0,200, CGRectGetHeight(svBounds))],
-		lsvBounds = [leftScrollView bounds];
-	[leftScrollView setAutoresizingMask:CPViewHeightSizable|CPViewWidthSizable ];
-	[leftScrollView setAutohidesScrollers:YES];
+	documentView = [[DocumentView alloc]
+		initWithFrame:CGRectMake(0,0,200, CGRectGetHeight(svBounds))
+		andDelegate:self];
+	[documentView setAutoresizingMask:CPViewHeightSizable|CPViewWidthSizable ];
 
-	leftCollection = [[CPCollectionView alloc] initWithFrame:CGRectMake(0,0,CGRectGetWidth(lsvBounds), 0)];
-
-	[leftCollection setDelegate:self];
-	[leftCollection setMinItemSize:CGSizeMake(20.0, 25.0)];
-	[leftCollection setMaxItemSize:CGSizeMake(1000.0, 25.0)];
-	[leftCollection setMaxNumberOfColumns:1];
-	[leftCollection setVerticalMargin:0.0];
-	[leftCollection setAutoresizingMask:CPViewWidthSizable ];
-
-	var photoItem = [[CPCollectionViewItem alloc] init];
-	[photoItem setView:[[DocumentCell alloc] initWithFrame:CGRectMake(0,0,150,150)]];
-	[leftCollection setItemPrototype:photoItem];
-	[leftScrollView setDocumentView:leftCollection];
-
-	// fill in some test data
-	/*
-	[photosets setObject:@"test" forKey:@"test"];
-	[photosets setObject:@"test" forKey:@"test2"];
-	[photosets setObject:@"test" forKey:@"test3"];
-	[leftCollection setContent:[[photosets allKeys] copy]];
-	*/
-
-	//[[leftScrollView contentView] setBackgroundColor:[CPColor blackColor]];
-
-	[splitView addSubview:leftScrollView];
+	[splitView addSubview:documentView];
 	[splitView addSubview:rightView];
-
-	/*
-    var label = [[CPTextField alloc] initWithFrame:CGRectMakeZero()];
-
-    [label setStringValue:@"Hello World!"];
-    [label setFont:[CPFont boldSystemFontOfSize:24.0]];
-
-    [label sizeToFit];
-
-    [label setAutoresizingMask:CPViewMinXMargin | CPViewMaxXMargin | CPViewMinYMargin | CPViewMaxYMargin];
-    [label setCenter:[rightView center]];
-
-    [rightView addSubview:label];
-	*/
 
 	[contentView addSubview:splitView];
 
     [theWindow orderFront:self];
 
-    // Uncomment the following line to turn on the standard menu bar.
-    //[CPMenu setMenuBarVisible:YES];
-
 	// fetch the document data
 	dataModel = [[DataModel alloc] initWithDelegate:self];
 }
 
-- (void)collectionViewDidChangeSelection:(CPCollectionView)aCollectionView
+- (void)pageSelected:(JSObject)aPage atIndex:(int)idx
 {
-	if(aCollectionView == leftCollection) {
-		var idx = [[leftCollection selectionIndexes] firstIndex],
-			record = [leftCollection content][idx];
-		_selectedDocument = record;
-		[rightCollection setSelectionIndexes: [CPIndexSet indexSet]];
+	[pageControls buildPageControlsFor:_selectedDocument withSelection:idx];
+}
 
-		if(record) {
-			[rightCollection setContent:[[CPArray alloc] initWithArray:record.pages]];
-		}
+- (void)documentSelected:(JSObject)aDoc
+{	
+	[pageView setContent:aDoc.pages];
+	[pageView setSelectionIndexes: [CPIndexSet indexSet]];
+	[pageControls buildPageControlsFor:aDoc withSelection:-1];
+}
 
-	} else if(aCollectionView == rightCollection) {
-		[pageControls buildPageControlsFor:_selectedDocument withSelection:[rightCollection selectionIndexes]];
+/*
+- (CPArray)collectionView:(CPCollectionView)aView dragTypesForItemsAtIndexes:(CPIndexSet)indices
+{
+	if (aView == leftCollection) {
+		return [DocumentDragType];
+	} else {
+		return undefined;
 	}
 }
+*/
 
 - (void)documentsDidChange:(CPDictionary)aDict
 {
@@ -272,8 +118,12 @@
 	var values = [[aDict allValues] copy];
 	[values sortUsingFunction:sortFunction context:nil];
 
-	[leftCollection setContent:values];
-	[self collectionViewDidChangeSelection:leftCollection];
+	[documentView setContent:values];
+
+	var currDoc = [documentView selected];
+	if(currDoc) {
+		[pageView setContent:currDoc.pages];
+	}
 
 	// can stop the spinner
 }
@@ -284,109 +134,11 @@
 	// TODO: turn on a spinner or something
 }
 
-- (void)remove:(CPIndexSet)selectedPages
+- (void)remove:(int)selectedPage
 {
-	var idx = [selectedPages firstIndex],
-	    record = [rightCollection content][idx];
+	var record = [pageView content][selectedPage];
 
 	[dataModel removePage:record.key];
-}
-
-@end
-
-@implementation DocumentCell : CPView
-{
-	CPTextField textField;
-	CPView highlightView;
-}
-
-- (void)setRepresentedObject:(JSObject)anObject
-{
-	if(!textField) {
-		textField = [[CPTextField alloc] initWithFrame:CGRectInset([self bounds],2,2)];
-		[textField setFont:[CPFont systemFontOfSize:12.0]];
-		[textField setAutoresizingMask:CPViewWidthSizable|CPViewHeightSizable];
-		[textField setTextColor:[CPColor blackColor]];
-		[textField setTextShadowColor:[CPColor whiteColor]];
-		[textField setTextShadowOffset:CGSizeMake(1,1)];
-		[self addSubview:textField];
-	}
-
-	[textField setStringValue:anObject.name];
-}
-
-- (void)setSelected:(BOOL)flag
-{
-	if(!highlightView) {
-		highlightView = [[CPView alloc] initWithFrame:[self bounds]];
-		//[highlightView setBackgroundColor:[CPColor grayColor]];
-		[highlightView setBackgroundColor:[CPColor colorWithRed:200.0/255 green:210.0/255.0 blue:220.0/255.0 alpha:1.0]];
-		[highlightView setAutoresizingMask:CPViewWidthSizable];
-	}
-
-	if(flag) {
-		[self addSubview:highlightView positioned:CPWindowBelow relativeTo:textField];
-		[textField setTextColor:[CPColor whiteColor]];
-		[textField setTextShadowColor:[CPColor blackColor]];
-		//[textField setTextFieldBackgroundColor:[CPColor colorWithRed:213.0/255 green:221.0/255.0 blue:230.0/255.0 alpha:1.0]];
-	} else {
-		[highlightView removeFromSuperview];
-		[textField setTextColor:[CPColor blackColor]];
-		[textField setTextShadowColor:[CPColor whiteColor]];
-		//[textField setTextFieldBackgroundColor:[CPColor colorWithCalibratedWhite:0.8 alpha:1.0]];
-	}
-}
-
-@end
-
-@implementation PageCell : CPView
-{
-	CPImageView imageView;
-	CPImage image;
-	CPView highlightView;
-}
-
-- (void)setRepresentedObject:(JSObject)anObject
-{
-	if(!imageView) {
-		imageView = [[CPImageView alloc] initWithFrame: [self bounds]];
-		[imageView setAutoresizingMask:CPViewWidthSizable|CPViewHeightSizable];
-		[imageView setImageScaling:CPScaleProportionally];
-		[imageView setHasShadow:YES];
-		[self addSubview:imageView];
-	}
-
-	var pickey = anObject.key;
-	var picfile = "/thumbnail/" + pickey + "?format=pagesized";
-	var pgImage = [[CPImage alloc] initWithContentsOfFile:picfile];
-
-	if([pgImage loadStatus] == CPImageLoadStatusCompleted) {
-		[imageView setImage: pgImage];
-		[pgImage setDelegate:nil];
-	} else {
-		[pgImage setDelegate:self];
-	}
-}
-
-- (void)setSelected:(BOOL)flag
-{
-	if(!highlightView) {
-		highlightView = [[CPView alloc] initWithFrame:[self bounds]];
-		[highlightView setBackgroundColor:[CPColor colorWithCalibratedWhite:0.8 alpha:1.0]];
-		[highlightView setAutoresizingMask:CPViewWidthSizable|CPViewHeightSizable];
-	}
-
-	if(flag) {
-		[highlightView setFrame:[self bounds]];
-		[self addSubview:highlightView positioned:CPWindowBelow relativeTo:imageView];
-	} else {
-		[highlightView removeFromSuperview];
-	}
-}
-
-- (void)imageDidLoad:(CPImage)anImage
-{
-	[imageView setImage:anImage];
 }
 
 @end
