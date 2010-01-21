@@ -21,8 +21,6 @@ DocumentDragType = "DocumentDragType";
 	PageView pageView;
 
 	CPView pageControls;
-	JSObject _selectedDocument;
-
 	DataModel dataModel;
 }
 
@@ -52,7 +50,7 @@ DocumentDragType = "DocumentDragType";
 	[pageControls setBackgroundColor: [CPColor colorWithCalibratedWhite:0.25 alpha:1.0]];
 	[pageControls setAutoresizingMask:CPViewWidthSizable|CPViewMaxYMargin];
 	[pageControls setDelegate:self];
-	[pageControls buildPageControlsFor:nil withSelection:nil];
+	[pageControls buildPageControlsFor:nil withSelection:-1];
 	[rightView addSubview:pageControls];
 
 	pageView = [[PageView alloc]
@@ -81,7 +79,7 @@ DocumentDragType = "DocumentDragType";
 
 - (void)pageSelected:(JSObject)aPage atIndex:(int)idx
 {
-	[pageControls buildPageControlsFor:_selectedDocument withSelection:idx];
+	[pageControls buildPageControlsFor:[documentView selected] withSelection:idx];
 }
 
 - (void)documentSelected:(JSObject)aDoc

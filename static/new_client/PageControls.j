@@ -13,7 +13,7 @@
 {
 	CPButton scanButton;
 	CPButton deleteButton;
-	CPButton moveButton;
+	//CPButton newDocument;
 
 	int selectedPage;
 	CPTextField pageNum;
@@ -32,7 +32,7 @@
 		var pcBounds = [self bounds];
 
 		scanButton = [[CPButton alloc] initWithFrame:CGRectMakeZero()];
-		[scanButton setTitle:@"New Scan"];
+		[scanButton setTitle:@"Start Scanner"];
 		[scanButton sizeToFit];
 		var bBounds = [scanButton bounds];
 		var buttonTop = (CGRectGetHeight(pcBounds) - CGRectGetHeight(bBounds)) / 2.0;
@@ -48,15 +48,6 @@
 		[deleteButton setAutoresizingMask:CPViewMaxXMargin];
 		bNextX += CGRectGetWidth([deleteButton bounds]) + 10;
 
-		moveButton = [[CPButton alloc] initWithFrame:CGRectMakeZero()];
-		[moveButton setTitle:@"Move Page"];
-		[moveButton sizeToFit];
-		[moveButton setTarget:self];
-		[moveButton setAction:@selector(move:)];
-		[moveButton setAutoresizingMask:CPViewMaxXMargin];
-		[moveButton setFrameOrigin: CGPointMake(bNextX, buttonTop)];
-		bNextX += CGRectGetWidth([deleteButton bounds]) + 10;
-
 		pageNum = [[CPTextField alloc] initWithFrame:CGRectMakeZero()];
 		[pageNum setStringValue:@"Page 1"];
 		[pageNum setFont:[CPFont boldSystemFontOfSize:16.0]];
@@ -67,30 +58,39 @@
 
 		// reset to right side
 		var bNextX = CGRectGetWidth(pcBounds) - 20;
-		[scanButton setFrameOrigin: CGPointMake(bNextX-CGRectGetWidth(bBounds), buttonTop)];
+		[scanButton setFrameOrigin:CGPointMake(bNextX-CGRectGetWidth(bBounds), buttonTop)];
 		[scanButton setTarget:self];
 		[scanButton setAction:@selector(scan:)];
 		[scanButton setAutoresizingMask:CPViewMinXMargin];
-		bNextX -= CGRectGetWidth(bBounds) - 10;
+		bNextX -= CGRectGetWidth(bBounds) + 10;
+
+		/*
+		newDocument = [[CPButton alloc] initWithFrame:CGRectMakeZero()];
+		[newDocument setStringValue:@"Create Document"];
+		[newDocument sizeToFit];
+		[newDocument setFrameOrigin:CGPointMake(bNextX-CGRectGetWidth([newDocument bounds]), buttonTop)];
+		[newDocument setAutoresizingMask:CPViewMinXMargin];
+		bNextX -= CGRectGetWidth([newDocument bounds]) + 10;
+		*/
 	}
 
 	_theDoc = aDoc;
 	if(_theDoc) {
 		[self addSubview:scanButton];
+		//[self addSubview:newDocument];
 	} else {
 		[scanButton removeFromSuperview];
+		//[newDocument removeFromSuperview];
 	}
 
 	if(anIdx == -1) {
 		[deleteButton removeFromSuperview];
-		[moveButton removeFromSuperview];
 		[pageNum removeFromSuperview];
 	} else {
 		selectedPage = anIdx;
 		var modPageNum = anIdx + 1;
 		[pageNum setStringValue:[CPString stringWithFormat:@"Page %d", modPageNum]];
 		[self addSubview:deleteButton];
-		[self addSubview:moveButton];
 		[self addSubview:pageNum];
 	}
 }
