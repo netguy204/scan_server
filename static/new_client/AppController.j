@@ -55,7 +55,6 @@ DocumentDragType = "DocumentDragType";
 	[pageControls buildPageControlsFor:nil withSelection:nil];
 	[rightView addSubview:pageControls];
 
-	
 	pageView = [[PageView alloc]
 		initWithFrame:CGRectMake(0,54,CGRectGetWidth(rvBounds),CGRectGetHeight(rvBounds)-54)
 		andDelegate:self];
@@ -90,6 +89,11 @@ DocumentDragType = "DocumentDragType";
 	[pageView setContent:aDoc.pages];
 	[pageView setSelectionIndexes: [CPIndexSet indexSet]];
 	[pageControls buildPageControlsFor:aDoc withSelection:-1];
+}
+
+- (void)documentItem:(JSObject)aDoc receivedPage:(JSObject)aPage
+{
+	alert("doc " + aDoc.name + " got page " + aPage.key);
 }
 
 /*

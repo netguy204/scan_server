@@ -35,7 +35,6 @@
 
 	var docItem = [[CPCollectionViewItem alloc] init];
 	var prototypeDocCell = [[DocumentCell alloc] initWithFrame:CGRectMake(0,0,150,150)];
-	[docView registerForDraggedTypes:[CPArray arrayWithObjects:PageDragType]];
 
 	[docItem setView:prototypeDocCell];
 	[docView setItemPrototype:docItem];
@@ -65,12 +64,35 @@
 	return _selectedDocument;
 }
 
+- (void)documentItem:(JSObject)aDoc receivedPage:(JSObject)aPage
+{
+	[_delegate documentItem:aDoc receivedPage:aPage];
+}
+
 @end
 
 @implementation DocumentCell : CPView
 {
 	CPTextField textField;
 	CPView highlightView;
+	JSObject ourObject;
+	BOOL _isActive;
+}
+
+- (void)initWithFrame:aFrame
+{
+	[super initWithFrame:aFrame];
+	return self;
+}
+
+- (void)setActive:(BOOL)isActive
+{
+	_isActive = isActive;
+	if(isActive) {
+		[textField setFont:[CPFont boldSystemFontOfSize:12.0]];
+	} else {
+		[textField setFont:[CPFont systemFontOfSize:12.0]];
+	}
 }
 
 - (void)setRepresentedObject:(JSObject)anObject
@@ -83,9 +105,11 @@
 		[textField setTextShadowColor:[CPColor whiteColor]];
 		[textField setTextShadowOffset:CGSizeMake(1,1)];
 		[self addSubview:textField];
+		[self registerForDraggedTypes:[CPArray arrayWithObjects:PageDragType]];
 	}
 
 	[textField setStringValue:anObject.name];
+	ourObject = anObject;
 }
 
 - (void)setSelected:(BOOL)flag
@@ -112,7 +136,27 @@
 
 - (void)performDragOperation:(CPDraggingInfo)aSender
 {
-	alert("got drag info " + aSender);
+	var data = [[aSender draggingPasteboard] dataForType:PageDragType],
+	    pageData = [CPKeyedUnarchiver unarchiveObjectWithData:data];
+
+	// crazy sick hack to get the document view because the state I'm
+	// constructed with goes away for some reason
+	var super1 = [self superview],
+	    super2 = [super1 superview],
+		super3 = [super2 superview];
+
+	[super3 documentItem:ourObject receivedPage:pageData];
+	[self setActive:NO];
+}
+
+- (void)draggingEntered:(CPDraggingInfo)aSender
+{
+	[self setActive:YES];
+}
+
+- (void)draggingExited:(CPDraggingInfo)aSender
+{
+	[self setActive:NO];
 }
 
 @end

@@ -73,7 +73,7 @@ PageDragType = "PageDragType";
 {
 	var firstIndex = [indices firstIndex],
 	    content = [aView content][firstIndex];
-	return [CPKeyedArchiver archiveDataWithRootObject:content];
+	return [CPKeyedArchiver archivedDataWithRootObject:content];
 }
 
 - (JSObject)content
