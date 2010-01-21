@@ -93,7 +93,7 @@ DocumentDragType = "DocumentDragType";
 
 - (void)documentItem:(JSObject)aDoc receivedPage:(JSObject)aPage
 {
-	alert("doc " + aDoc.name + " got page " + aPage.key);
+	[dataModel movePage:aPage toDocument:aDoc];
 }
 
 /*
@@ -166,7 +166,7 @@ DocumentDragType = "DocumentDragType";
 	return self;
 }
 
-- (void)removePage:(CPString)aKey
+- (void)removePage:(CPString)aKey andRefresh:(BOOL)doRefresh
 {
 	// find the page
 	var docKeys = [data allKeys];
@@ -181,13 +181,45 @@ DocumentDragType = "DocumentDragType";
 		}
 	}
 
+	if(docFound && doRefresh) {
+		[self _hostRemovePage:aKey];
+		[self refreshDelegate];
+	}
+}
+
+- (void)refreshDelegate
+{
+	[_delegate documentsDidChange:data]
+}
+
+- (void)_hostRemovePage:(CPString)aKey
+{
+	[self _hostRemovePage:aKey moveTo:nil];
+}
+
+- (void)_hostRemovePage:(CPString)aKey moveTo:(CPString)aDocKey
+{
 	var REMOVE_URL = "/remove/" + aKey + "?format=json";
+	if(aDocKey) {
+		REMOVE_URL = REMOVE_URL + "&moveto=" + aDocKey;
+	}
+
 	var request = [CPURLRequest requestWithURL:REMOVE_URL];
 	var connection = [CPURLConnection connectionWithRequest:request delegate:self];
+}
 
-	if(docFound) {
-		[_delegate documentsDidChange:data]
-	}
+- (void)removePage:(CPString)aKey
+{
+	[self removePage:aKey andRefresh:YES];
+}
+
+- (void)movePage:(JSObject)aPage toDocument:(JSObject)aDoc
+{
+	[self removePage:aPage.key andRefresh:NO];
+	var realDoc = [data objectForKey:aDoc.key];
+	realDoc.pages.push(aPage);
+	[self _hostRemovePage:aPage.key moveTo:aDoc.key];
+	[self refreshDelegate];
 }
 
 - (void)scanForDocument:(JSObject)aDoc

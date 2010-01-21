@@ -198,17 +198,30 @@ class RemoveHandler(tornado.web.RequestHandler):
       print "remove failed"
       return
     
+    moveto = self.get_argument("moveto", None)
+    newdoc = None
+    if moveto:
+      newdoc = scan_data.read_document(moveto, db)
+      newdoc.add_page(page)
+      scan_data.write_document(newdoc, db)
+
     format = self.get_argument("format", None)
     if format and format == "json":
       self.set_header("Content-Type", "text/javascript")
       if doc:
-        # reload the document to see the changes
-        doc = scan_data.read_document(doc.key(), db)
-        self.write(json.dumps([ doc_to_dict(doc) ]))
+        # reload the source document to see the changes
+        result = []
+        result.append(doc_to_dict(scan_data.read_document(doc.key(), db)))
+
+        # if we moved the pages then add the new doc to the result
+        if newdoc:
+          result.append(doc_to_dict(newdoc))
+
+        self.write(json.dumps(result))
       else:
         # doc is missing from this page
         print "odd, removed page with no document"
-        self.write(json.dumps([]))
+        self.write("alert(\"server here: you were bad bad bad\");")
 
     else:
       self.set_header("Content-Type", "text/html")
